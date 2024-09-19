@@ -1,0 +1,134 @@
+#include <ESP8266WiFi.h>
+#include <ArduinoJson.h>
+#include <set>
+#include <string>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+#include <ESP8266HTTPClient.h>
+#include "./funcoes.h"
+#include "./conexaoWifi.h"
+
+#define disable 0
+#define enable  1
+#define SENDTIME 500
+#define MAXDEVICES 60
+#define JBUFFER 15+ (MAXDEVICES * 200)
+#define PURGETIME 600000
+#define MINRSSI -70
+
+unsigned int channel = 1;
+int clients_known_count_old, aps_known_count_old;
+
+String device[MAXDEVICES];
+int nbrDevices = 0;
+int usedChannels[15];
+
+HTTPClient http;
+
+
+void setup() {
+  Serial.begin(115200);
+  //LigaPromiscuo();
+}
+
+void loop(){
+  LigaPromiscuo();
+  int cont=0; 
+  for (int i = 1; i < 16; i++){
+     wifi_set_channel(i);
+     showDevices();
+     cont++;
+     delay(500);
+  }
+  wifi_promiscuous_enable(disable);
+  connectToWiFi();
+  EnviaJsonHttp();
+  zeraListaDispositivos();
+  //ESP.reset();
+}
+
+long checkOST(){
+  //as 3 linhas abaixo configuram o ntp
+  WiFiUDP ntpUDP;
+  int16_t utc = -3; //UTC -3:00 Brazil
+  NTPClient timeClient(ntpUDP, "gps.ntp.br", utc*3600, 60000);
+  timeClient.begin();
+  timeClient.update();
+  //Serial.println(timeClient.getFormattedTime());
+  Serial.println(timeClient.getEpochTime());
+  return timeClient.getEpochTime();
+  delay(1000);
+}
+
+
+void LigaPromiscuo(){
+    wifi_set_opmode(STATION_MODE);     // Para o modo Promiscuo a placa tem que trabalhar em modo station.
+    wifi_set_channel(channel);
+    wifi_promiscuous_enable(disable);
+    wifi_set_promiscuous_rx_cb(promisc_cb);   //Chamada do modo promiscuo
+    wifi_promiscuous_enable(enable);
+}
+
+void zeraListaDispositivos(){
+  
+    clients_known[0];
+    clients_known_count=0;
+    
+}
+void EnviaJsonHttp(){
+
+  //defiinindo um buffer para o json 
+  StaticJsonBuffer<400> jsonBuffer;
+  //Criando o objeto raiz
+  JsonObject& raiz = jsonBuffer.createObject();
+  JsonArray& mac = raiz.createNestedArray("mac");
+
+  raiz["sensor_id"] = 2; 
+  
+  HTTPClient http;
+
+  raiz["timestamp"]= checkOST();
+  
+ // http.begin("http://10.142.70.238:5000/scan");
+  http.begin("http://10.142.70.85:5000/scan");
+  http.addHeader("Content-Type", "application/json");
+
+  for (int c = 0; c < clients_known_count; c++){
+    if(formatMac1(clients_known[c].station)!=""){
+      if(clients_known[c].rssi > -80){     
+        mac.add(formatMac1(clients_known[c].station)); 
+      }           
+    } 
+  }
+  String MsgJson;
+  raiz.printTo(MsgJson);
+ //raiz.printTo(Serial);
+  Serial.println(MsgJson);
+  int httpCode = http.POST(MsgJson); 
+
+   http.writeToStream(&Serial);
+   String payload = http.getString();
+   Serial.println(httpCode);   //Print HTTP return code
+   Serial.println(payload);    //Print request response payload
+ 
+   http.end();
+}
+
+
+void showDevices() {
+  Serial.println("");
+
+  // Mostra Clientes
+  Serial.println("-------------------Dispositivos Encontrados-------------------");
+  for (int u = 0; u < clients_known_count; u++){   
+    if(clients_known[u].rssi > -80){     
+      Serial.printf("%4d ",u); // Show client number
+      Serial.print("C ");
+      Serial.print(formatMac1(clients_known[u].station)); 
+      Serial.print(" RSSI ");
+      Serial.print(clients_known[u].rssi);
+      Serial.print(" channel ");
+      Serial.println(clients_known[u].channel);
+    }
+  }
+}
