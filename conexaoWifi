@@ -1,0 +1,25 @@
+#include <ESP8266WiFi.h>
+
+//seeguindo como modelo a reede abaixo basta inserir o ID e a senha da rede para conectar a esp8266
+#ifndef CREDENTIALS
+#define mySSID "UFRN_CERES"
+#define myPASSWORD "UFRN@1306"
+#endif
+
+
+
+void connectToWiFi() {
+ // wifi_promiscuous_enable(disable);
+  delay(10);
+  // INICIANDO A CONEXAO COM O WIFI
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(mySSID);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(mySSID, myPASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
